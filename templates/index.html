@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f8f9fa;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    .card {
+      border-radius: 1rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #333;
+    }
+
+    .stat {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #007bff;
+    }
+
+    .scroll-table {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .toggle-link {
+      cursor: pointer;
+      color: #007bff;
+      text-decoration: underline;
+    }
+
+    .list-group-item {
+      background-color: #fff !important;
+    }
+  </style>
+</head>
+
+<body class="p-4">
+  <div class="container">
+    <h2 class="mb-4 text-center">🧠 System Monitoring Dashboard</h2>
+
+    <div class="row g-4">
+      <div class="col-md-4">
+        <div class="card p-3">
+          <div class="section-title">CPU Usage</div>
+          <div id="cpu" class="stat">Loading...</div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <div class="card p-3">
+          <div class="section-title">Memory Usage</div>
+          <div id="memory" class="stat">Loading...</div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <div class="card p-3">
+          <div class="section-title">Disk Usage</div>
+          <div id="disk" class="stat">Loading...</div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card p-3">
+          <div class="section-title">Running Processes</div>
+          <div class="scroll-table">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>PID</th>
+                  <th>Name</th>
+                  <th>CPU%</th>
+                  <th>Mem%</th>
+                </tr>
+              </thead>
+              <tbody id="processes"></tbody>
+            </table>
+          </div>
+          <div class="text-end"><span class="toggle-link" onclick="toggleProcesses()">Show All</span></div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card p-3">
+          <div class="section-title">Running Services</div>
+          <div class="scroll-table">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Display</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="services"></tbody>
+            </table>
+            <a href="#" id="toggle-services">Show All</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card p-3">
+          <div class="section-title">System Uptime & Boot Time</div>
+          <p><strong>Boot Time:</strong> <span id="boot-time"></span></p>
+          <p><strong>Uptime:</strong> <span id="uptime"></span></p>
+        </div>
+      </div>
+
+
+
+      <div class="col-md-6">
+        <div class="card p-3">
+          <div class="section-title">Windows Updates</div>
+          <ul id="updates" class="list-group list-group-flush"></ul>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card p-3">
+          <div class="section-title">Logged-in Users</div>
+          <ul id="users" class="list-group list-group-flush"></ul>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card p-3">
+          <div class="section-title">Network Interfaces</div>
+          <ul id="network" class="list-group list-group-flush"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-4 text-center">
+    <button class="btn btn-outline-primary" onclick="exportData('csv')">Export CSV</button>
+    <button class="btn btn-outline-success" onclick="exportData('json')">Export JSON</button>
+    <button class="btn btn-outline-danger" onclick="exportData('pdf')">Export PDF</button>
+  </div>
+
+  <script>
+    let allProcesses = [];
+    let showingAll = false;
+
+    let allServices = [];
+    let showAllServices = false;
+
+
+    async function fetchStats() {
+      const res = await fetch('/api/system');
+      const data = await res.json();
+      document.getElementById('cpu').innerText = data.cpu + '%';
+      document.getElementById('memory').innerText = data.memory + '%';
+      document.getElementById('disk').innerText = data.disk + '%';
+      document.getElementById('boot-time').innerText = data.boot_time;
+      document.getElementById('uptime').innerText = data.uptime;
+
+      allProcesses = data.processes;
+      renderProcesses();
+
+      document.getElementById('services').innerHTML = data.services.slice(0, 10).map(s =>
+        ` <tr>
+        <td>${s.name}</td>
+        <td>${s.display_name}</td>
+        <td>${s.status}</td>
+    </tr>`
+      ).join('');
+    }
+
+    function renderProcesses() {
+      const list = showingAll ? allProcesses : allProcesses.slice(0, 10);
+      document.getElementById('processes').innerHTML = list.map(p =>
+        `<tr>
+        <td>${p.pid}</td>
+        <td>${p.name}</td>
+        <td>${p.cpu_percent}</td>
+        <td>${p.memory_percent.toFixed(1)}</td>
+    </tr>`
+      ).join('');
+      document.querySelector(".toggle-link").innerText = showingAll ? "Show less" : "Show All";
+    }
+
+    function toggleProcesses() {
+      showingAll = !showingAll;
+      renderProcesses();
+    }
+
+    function renderServices() {
+      // Determine which services to show based on the toggle state
+      const servicesToShow = showAllServices ? allServices : allServices.slice(0, 10);
+      const servicesContainer = document.getElementById('services');
+      servicesContainer.innerHTML = '';
+
+      servicesToShow.forEach(service => {
+        const row = `<tr>
+        <td>${service.name}</td>
+        <td>${service.display_name}</td>
+        <td>${service.status}</td>
+    </tr>`;
+        servicesContainer.innerHTML += row;
+      });
+
+      document.getElementById('toggle-services').innerText = showAllServices ? "Show Less" : "Show All";
+    }
+
+    document.getElementById('toggle-services').addEventListener('click', function (e) {
+      e.preventDefault();
+      showAllServices = !showAllServices; // Toggle state
+      renderServices(); // Re-render the services based on the new state
+    });
+
+    function exportData(type) {
+      fetch('/api/system').then(res => res.json()).then(data => {
+        let filename = 'system_data';
+        if (type === 'json') {
+          const blob = new Blob([JSON.stringify(data, null, 2)], {
+            type: 'application/json'
+          });
+          downloadBlob(blob, `${filename}.json`);
+        } else if (type === 'csv') {
+          let csv = "Key,Value\n";
+          for (let key in data) {
+            if (typeof data[key] !== 'object') csv += `${key},${data[key]}\n`;
+          }
+          const blob = new Blob([csv], {
+            type: 'text/csv'
+          });
+          downloadBlob(blob, `${filename}.csv`);
+        } else if (type === 'pdf') {
+          const blob = new Blob([JSON.stringify(data, null, 2)], {
+            type: 'application/pdf'
+          });
+          downloadBlob(blob, `${filename}.pdf`);
+        }
+      });
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+
+    async function fetchUpdates() {
+      const res = await fetch('/api/updates');
+      const data = await res.json();
+      document.getElementById('updates').innerHTML = data.updates.map(u =>
+        `<li class="list-group-item">${u}</li>`
+      ).join('');
+    }
+
+    async function fetchUsers() {
+      const res = await fetch('/api/users');
+      const data = await res.json();
+      document.getElementById('users').innerHTML = data.users.map(u =>
+        `<li class="list-group-item">${u}</li>`
+      ).join('');
+    }
+
+    async function fetchNetwork() {
+      const res = await fetch('/api/network');
+      const data = await res.json();
+      let html = '';
+      for (let iface in data.network) {
+        html += `<li class="list-group-item"><strong>${iface}:</strong> ${data.network[iface].join(', ')}</li>`;
+      }
+      document.getElementById('network').innerHTML = html;
+    }
+
+    async function refreshAll() {
+      await Promise.all([
+        fetchStats(),
+        fetchUpdates(),
+        fetchUsers(),
+        fetchNetwork()
+      ]);
+    }
+
+    refreshAll();
+    setInterval(refreshAll, 10000);
+  </script>
+</body>
+
+</html>
