@@ -44,14 +44,130 @@
     .list-group-item {
       background-color: #fff !important;
     }
+
+    .server-connection {
+      background-color: #fff;
+      padding: 1rem;
+      margin-bottom: 2rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .connection-status {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+      margin-left: 1rem;
+    }
+
+    .connected {
+      background-color: #d4edda;
+      color: #155724;
+    }
+
+    .disconnected {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+
+    .data-source-indicator {
+      background-color: #e9ecef;
+      padding: 0.5rem;
+      border-radius: 0.25rem;
+      margin-bottom: 1rem;
+      text-align: center;
+      font-size: 0.9rem;
+    }
   </style>
 </head>
 
 <body class="p-4">
   <div class="container">
+    <!-- Server Connection Form -->
+    <div class="server-connection">
+      <form id="serverConnectionForm" class="row g-3 align-items-center">
+        <div class="col-md-4">
+          <input type="text" class="form-control" id="serverFQDN" placeholder="Server FQDN" required>
+        </div>
+        <div class="col-md-3">
+          <input type="text" class="form-control" id="username" placeholder="Username" required>
+        </div>
+        <div class="col-md-3">
+          <input type="password" class="form-control" id="password" placeholder="Password" required>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Connect</button>
+        </div>
+        <div class="col-12">
+          <span id="connectionStatus" class="connection-status disconnected">Showing Local System Data</span>
+        </div>
+      </form>
+    </div>
+
     <h2 class="mb-4 text-center">🧠 System Monitoring Dashboard</h2>
+    <div id="dataSourceIndicator" class="data-source-indicator">
+      Currently monitoring: <strong>Local System</strong>
+    </div>
 
     <div class="row g-4">
+      <!-- System Information Card -->
+      <div class="col-12">
+        <div class="card p-3">
+          <div class="section-title">System Information</div>
+          <div class="row">
+            <div class="col-md-6">
+              <table class="table table-sm">
+                <tbody>
+                  <tr>
+                    <td><strong>OS Name:</strong></td>
+                    <td id="os-name">Loading...</td>
+                  </tr>
+                  <tr>
+                    <td><strong>OS Version:</strong></td>
+                    <td id="os-version">Loading...</td>
+                  </tr>
+                  <tr>
+                    <td><strong>System Model:</strong></td>
+                    <td id="system-model">Loading...</td>
+                  </tr>
+                  <tr>
+                    <td><strong>System Type:</strong></td>
+                    <td id="system-type">Loading...</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Processor:</strong></td>
+                    <td id="processor">Loading...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="col-md-6">
+              <table class="table table-sm">
+                <tbody>
+                  <tr>
+                    <td><strong>BIOS Version:</strong></td>
+                    <td id="bios-version">Loading...</td>
+                  </tr>
+                  <tr>
+                    <td><strong>BIOS Date:</strong></td>
+                    <td id="bios-date">Loading...</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Total RAM:</strong></td>
+                    <td id="total-ram">Loading...</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Manufacturer:</strong></td>
+                    <td id="manufacturer">Loading...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="col-md-4">
         <div class="card p-3">
           <div class="section-title">CPU Usage</div>
@@ -120,12 +236,22 @@
         </div>
       </div>
 
-
-
       <div class="col-md-6">
         <div class="card p-3">
           <div class="section-title">Windows Updates</div>
-          <ul id="updates" class="list-group list-group-flush"></ul>
+          <div class="scroll-table">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>Update ID</th>
+                  <th>Description</th>
+                  <th>Installed On</th>
+                  <th>Installed By</th>
+                </tr>
+              </thead>
+              <tbody id="updates"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -154,41 +280,100 @@
   <script>
     let allProcesses = [];
     let showingAll = false;
-
     let allServices = [];
     let showAllServices = false;
+    let isConnected = false;
+    let currentServer = 'local';
 
+    document.getElementById('serverConnectionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const serverFQDN = document.getElementById('serverFQDN').value;
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+
+      try {
+        const response = await fetch('/api/connect', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            server: serverFQDN,
+            username: username,
+            password: password
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          isConnected = true;
+          currentServer = serverFQDN;
+          document.getElementById('connectionStatus').textContent = 'Connected to ' + serverFQDN;
+          document.getElementById('connectionStatus').classList.remove('disconnected');
+          document.getElementById('connectionStatus').classList.add('connected');
+          document.getElementById('dataSourceIndicator').innerHTML =
+            `Currently monitoring: <strong>${serverFQDN}</strong>`;
+          refreshAll();
+        } else {
+          throw new Error(data.error);
+        }
+      } catch (error) {
+        isConnected = false;
+        currentServer = 'local';
+        document.getElementById('connectionStatus').textContent = 'Connection Failed: ' + error.message;
+        document.getElementById('connectionStatus').classList.remove('connected');
+        document.getElementById('connectionStatus').classList.add('disconnected');
+        document.getElementById('dataSourceIndicator').innerHTML =
+          'Currently monitoring: <strong>Local System</strong>';
+        refreshAll();
+      }
+    });
 
     async function fetchStats() {
-      const res = await fetch('/api/system');
-      const data = await res.json();
-      document.getElementById('cpu').innerText = data.cpu + '%';
-      document.getElementById('memory').innerText = data.memory + '%';
-      document.getElementById('disk').innerText = data.disk + '%';
-      document.getElementById('boot-time').innerText = data.boot_time;
-      document.getElementById('uptime').innerText = data.uptime;
+      try {
+        const endpoint = isConnected ? '/api/system?remote=true' : '/api/system?remote=false';
+        const res = await fetch(endpoint);
+        const data = await res.json();
 
-      allProcesses = data.processes;
-      renderProcesses();
+        if (data.system_details) {
+          document.getElementById('os-name').innerText = data.system_details.os_name || 'N/A';
+          document.getElementById('os-version').innerText = data.system_details.os_version || 'N/A';
+          document.getElementById('system-model').innerText = data.system_details.system_model || 'N/A';
+          document.getElementById('system-type').innerText = data.system_details.system_type || 'N/A';
+          document.getElementById('processor').innerText = data.system_details.processor || 'N/A';
+          document.getElementById('bios-version').innerText = data.system_details.bios_version || 'N/A';
+          document.getElementById('bios-date').innerText = data.system_details.bios_date || 'N/A';
+          document.getElementById('total-ram').innerText = `${data.system_details.total_ram} GB` || 'N/A';
+          document.getElementById('manufacturer').innerText = data.system_details.manufacturer || 'N/A';
+        }
 
-      document.getElementById('services').innerHTML = data.services.slice(0, 10).map(s =>
-        ` <tr>
-        <td>${s.name}</td>
-        <td>${s.display_name}</td>
-        <td>${s.status}</td>
-    </tr>`
-      ).join('');
+        document.getElementById('cpu').innerText = data.cpu + '%';
+        document.getElementById('memory').innerText = data.memory + '%';
+        document.getElementById('disk').innerText = data.disk + '%';
+        document.getElementById('boot-time').innerText = data.boot_time;
+        document.getElementById('uptime').innerText = data.uptime;
+
+        allProcesses = data.processes;
+        renderProcesses();
+
+        allServices = data.services;
+        renderServices();
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      }
     }
 
     function renderProcesses() {
       const list = showingAll ? allProcesses : allProcesses.slice(0, 10);
       document.getElementById('processes').innerHTML = list.map(p =>
         `<tr>
-        <td>${p.pid}</td>
-        <td>${p.name}</td>
-        <td>${p.cpu_percent}</td>
-        <td>${p.memory_percent.toFixed(1)}</td>
-    </tr>`
+          <td>${p.pid}</td>
+          <td>${p.name}</td>
+          <td>${p.cpu_percent}</td>
+          <td>${p.memory_percent.toFixed(1)}</td>
+        </tr>`
       ).join('');
       document.querySelector(".toggle-link").innerText = showingAll ? "Show less" : "Show All";
     }
@@ -199,17 +384,16 @@
     }
 
     function renderServices() {
-      // Determine which services to show based on the toggle state
       const servicesToShow = showAllServices ? allServices : allServices.slice(0, 10);
       const servicesContainer = document.getElementById('services');
       servicesContainer.innerHTML = '';
 
       servicesToShow.forEach(service => {
         const row = `<tr>
-        <td>${service.name}</td>
-        <td>${service.display_name}</td>
-        <td>${service.status}</td>
-    </tr>`;
+          <td>${service.name}</td>
+          <td>${service.display_name}</td>
+          <td>${service.status}</td>
+        </tr>`;
         servicesContainer.innerHTML += row;
       });
 
@@ -218,13 +402,48 @@
 
     document.getElementById('toggle-services').addEventListener('click', function (e) {
       e.preventDefault();
-      showAllServices = !showAllServices; // Toggle state
-      renderServices(); // Re-render the services based on the new state
+      showAllServices = !showAllServices;
+      renderServices();
     });
 
+    async function fetchUpdates() {
+      const endpoint = isConnected ? '/api/updates?remote=true' : '/api/updates?remote=false';
+      const res = await fetch(endpoint);
+      const data = await res.json();
+      document.getElementById('updates').innerHTML = data.updates.map(update => `
+        <tr>
+          <td>${update.HotFixID}</td>
+          <td>${update.Description}</td>
+          <td>${update.InstalledOn}</td>
+          <td>${update.InstalledBy}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function fetchUsers() {
+      const endpoint = isConnected ? '/api/users?remote=true' : '/api/users?remote=false';
+      const res = await fetch(endpoint);
+      const data = await res.json();
+      document.getElementById('users').innerHTML = data.users.map(u =>
+        `<li class="list-group-item">${u}</li>`
+      ).join('');
+    }
+
+    async function fetchNetwork() {
+      const endpoint = isConnected ? '/api/network?remote=true' : '/api/network?remote=false';
+      const res = await fetch(endpoint);
+      const data = await res.json();
+      let html = '';
+      for (let iface in data.network) {
+        html += `<li class="list-group-item"><strong>${iface}:</strong> ${data.network[iface].join(', ')}</li>`;
+      }
+      document.getElementById('network').innerHTML = html;
+    }
+
     function exportData(type) {
-      fetch('/api/system').then(res => res.json()).then(data => {
-        let filename = 'system_data';
+      const endpoint = isConnected ? '/api/system?remote=true' : '/api/system?remote=false';
+      fetch(endpoint).then(res => res.json()).then(data => {
+        let filename = `system_data_${currentServer}`;
         if (type === 'json') {
           const blob = new Blob([JSON.stringify(data, null, 2)], {
             type: 'application/json'
@@ -257,33 +476,6 @@
       URL.revokeObjectURL(url);
     }
 
-
-    async function fetchUpdates() {
-      const res = await fetch('/api/updates');
-      const data = await res.json();
-      document.getElementById('updates').innerHTML = data.updates.map(u =>
-        `<li class="list-group-item">${u}</li>`
-      ).join('');
-    }
-
-    async function fetchUsers() {
-      const res = await fetch('/api/users');
-      const data = await res.json();
-      document.getElementById('users').innerHTML = data.users.map(u =>
-        `<li class="list-group-item">${u}</li>`
-      ).join('');
-    }
-
-    async function fetchNetwork() {
-      const res = await fetch('/api/network');
-      const data = await res.json();
-      let html = '';
-      for (let iface in data.network) {
-        html += `<li class="list-group-item"><strong>${iface}:</strong> ${data.network[iface].join(', ')}</li>`;
-      }
-      document.getElementById('network').innerHTML = html;
-    }
-
     async function refreshAll() {
       await Promise.all([
         fetchStats(),
@@ -293,6 +485,7 @@
       ]);
     }
 
+    // Start with local data
     refreshAll();
     setInterval(refreshAll, 10000);
   </script>
