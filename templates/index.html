@@ -223,8 +223,8 @@
               </thead>
               <tbody id="services"></tbody>
             </table>
-            <a href="#" id="toggle-services">Show All</a>
           </div>
+          <div class="text-end"><span class="toggle-link" onclick="toggleServices()">Show All</span></div>
         </div>
       </div>
 
@@ -274,7 +274,6 @@
   <div class="mt-4 text-center">
     <button class="btn btn-outline-primary" onclick="exportData('csv')">Export CSV</button>
     <button class="btn btn-outline-success" onclick="exportData('json')">Export JSON</button>
-    <button class="btn btn-outline-danger" onclick="exportData('pdf')">Export PDF</button>
   </div>
 
   <script>
@@ -385,26 +384,20 @@
 
     function renderServices() {
       const servicesToShow = showAllServices ? allServices : allServices.slice(0, 10);
-      const servicesContainer = document.getElementById('services');
-      servicesContainer.innerHTML = '';
-
-      servicesToShow.forEach(service => {
-        const row = `<tr>
+      document.getElementById('services').innerHTML = servicesToShow.map(service =>
+        `<tr>
           <td>${service.name}</td>
           <td>${service.display_name}</td>
           <td>${service.status}</td>
-        </tr>`;
-        servicesContainer.innerHTML += row;
-      });
-
-      document.getElementById('toggle-services').innerText = showAllServices ? "Show Less" : "Show All";
+        </tr>`
+      ).join('');
+      document.querySelector("#services + .text-end .toggle-link").innerText = showAllServices ? "Show Less" : "Show All";
     }
 
-    document.getElementById('toggle-services').addEventListener('click', function (e) {
-      e.preventDefault();
+    function toggleServices() {
       showAllServices = !showAllServices;
       renderServices();
-    });
+    }
 
     async function fetchUpdates() {
       const endpoint = isConnected ? '/api/updates?remote=true' : '/api/updates?remote=false';
