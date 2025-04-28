@@ -43,27 +43,37 @@ try {
     $credential = New-Object System.Management.Automation.PSCredential($username, $password)
     $session = New-PSSession -ComputerName $server -Credential $credential -ErrorAction Stop
     
-    # Store the connection details in a JSON file
-    $connectionInfo = @{
-        server = $server
-        username = $username
-        password = $plainPassword
-        isConnected = $true
+    # Test if we can get basic system info
+    $testCommand = "Get-WmiObject Win32_OperatingSystem | Select-Object Caption"
+    $testResult = Invoke-Command -Session $session -ScriptBlock { Invoke-Expression $using:testCommand }
+    
+    if ($testResult) {
+        # Store the connection details in a JSON file
+        $connectionInfo = @{
+            server = $server
+            username = $username
+            password = $plainPassword
+            isConnected = $true
+            timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        }
+        
+        $connectionInfo | ConvertTo-Json | Out-File $jsonPath -Force
+        
+        Write-Host "`nSuccessfully connected to $server"
+        Write-Host "Connection details saved to $jsonPath"
+        Remove-PSSession $session
+    } else {
+        throw "Could not retrieve system information from remote server"
     }
-    
-    $connectionInfo | ConvertTo-Json | Out-File $jsonPath -Force
-    
-    Write-Host "`nSuccessfully connected to $server"
-    Remove-PSSession $session
-    Write-Host "`nPress any key to continue..."
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 } catch {
     Write-Host "`nFailed to connect to $server : $_"
     $connectionInfo = @{
         isConnected = $false
         error = $_.Exception.Message
+        timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
     $connectionInfo | ConvertTo-Json | Out-File $jsonPath -Force
-    Write-Host "`nPress any key to continue..."
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-} 
+}
+
+Write-Host "`nPress any key to continue..."
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") 

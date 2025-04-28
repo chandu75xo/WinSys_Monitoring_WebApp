@@ -67,6 +67,11 @@ def connect_to_server():
     try:
         # Get the absolute path to the PowerShell script
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'connect_server.ps1')
+        json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'connection_info.json')
+        
+        # Remove any existing connection info file
+        if os.path.exists(json_path):
+            os.remove(json_path)
         
         # Use a simpler command to open PowerShell
         command = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& {{Start-Process powershell -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -File \\\"{script_path}\\\"\' -Verb RunAs}}"'
@@ -74,23 +79,26 @@ def connect_to_server():
         # Run the command
         subprocess.run(command, shell=True)
         
-        # Wait a bit for the script to run
-        time.sleep(2)
+        # Wait for the script to complete and file to be written
+        max_attempts = 10
+        attempt = 0
+        while attempt < max_attempts:
+            if os.path.exists(json_path):
+                with open(json_path, 'r') as f:
+                    connection_info = json.load(f)
+                    if connection_info.get('isConnected'):
+                        session['server_info'] = {
+                            'server': connection_info['server'],
+                            'username': connection_info['username'],
+                            'password': connection_info['password']
+                        }
+                        return jsonify(connection_info)
+                    else:
+                        return jsonify({"error": connection_info.get('error', 'Connection failed'), "isConnected": False}), 401
+            time.sleep(1)
+            attempt += 1
         
-        # Read connection info from JSON file
-        json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'connection_info.json')
-        if os.path.exists(json_path):
-            with open(json_path, 'r') as f:
-                connection_info = json.load(f)
-                if connection_info.get('isConnected'):
-                    session['server_info'] = {
-                        'server': connection_info['server'],
-                        'username': connection_info['username'],
-                        'password': connection_info['password']
-                    }
-                    return jsonify(connection_info)
-        
-        return jsonify({"error": "Connection failed", "isConnected": False}), 401
+        return jsonify({"error": "Connection timed out", "isConnected": False}), 408
     except Exception as e:
         return jsonify({"error": str(e), "isConnected": False}), 500
 
@@ -185,73 +193,90 @@ def get_running_services(server_info=None):
 def system_info():
     is_remote = request.args.get('remote') == 'true'
     
-    if is_remote and 'server_info' in session:
-        server_info = session.get('server_info')
-        commands = {
-            'cpu': 'Get-WmiObject Win32_Processor | Select-Object LoadPercentage | ConvertTo-Json',
-            'memory': 'Get-WmiObject Win32_OperatingSystem | Select-Object @{Name="MemoryUsage";Expression={[math]::Round((1 - $_.FreePhysicalMemory/$_.TotalVisibleMemorySize) * 100, 2)}} | ConvertTo-Json',
-            'disk': 'Get-WmiObject Win32_LogicalDisk | Select-Object Size,FreeSpace | ConvertTo-Json',
-            'system_details': '''
-                $os = Get-WmiObject Win32_OperatingSystem
-                $cs = Get-WmiObject Win32_ComputerSystem
-                $bios = Get-WmiObject Win32_BIOS
-                @{
-                    os_name = $os.Caption
-                    os_version = $os.Version
-                    system_model = $cs.Model
-                    system_type = $cs.SystemType
-                    processor = $cs.NumberOfProcessors
-                    bios_version = $bios.SMBIOSBIOSVersion
-                    bios_date = $bios.ReleaseDate
-                    manufacturer = $cs.Manufacturer
-                    total_ram = [math]::Round($cs.TotalPhysicalMemory/1GB, 2)
-                } | ConvertTo-Json
-            '''
-        }
+    try:
+        if is_remote and 'server_info' in session:
+            server_info = session.get('server_info')
+            # Test the connection first
+            test_cmd = 'Test-WSMan -ComputerName {0} -Credential (New-Object PSCredential(\'{1}\', (ConvertTo-SecureString \'{2}\' -AsPlainText -Force)))'.format(
+                server_info['server'], server_info['username'], server_info['password']
+            )
+            test_result = subprocess.run(f'powershell "{test_cmd}"', capture_output=True, text=True, shell=True)
+            
+            if test_result.returncode != 0:
+                session.pop('server_info', None)
+                return jsonify({"error": "Connection lost", "isConnected": False}), 401
+            
+            # Rest of your remote system info collection code...
+            commands = {
+                'cpu': 'Get-WmiObject Win32_Processor | Select-Object LoadPercentage | ConvertTo-Json',
+                'memory': 'Get-WmiObject Win32_OperatingSystem | Select-Object @{Name="MemoryUsage";Expression={[math]::Round((1 - $_.FreePhysicalMemory/$_.TotalVisibleMemorySize) * 100, 2)}} | ConvertTo-Json',
+                'disk': 'Get-WmiObject Win32_LogicalDisk | Select-Object Size,FreeSpace | ConvertTo-Json',
+                'system_details': '''
+                    $os = Get-WmiObject Win32_OperatingSystem
+                    $cs = Get-WmiObject Win32_ComputerSystem
+                    $bios = Get-WmiObject Win32_BIOS
+                    @{
+                        os_name = $os.Caption
+                        os_version = $os.Version
+                        system_model = $cs.Model
+                        system_type = $cs.SystemType
+                        processor = $cs.NumberOfProcessors
+                        bios_version = $bios.SMBIOSBIOSVersion
+                        bios_date = $bios.ReleaseDate
+                        manufacturer = $cs.Manufacturer
+                        total_ram = [math]::Round($cs.TotalPhysicalMemory/1GB, 2)
+                    } | ConvertTo-Json
+                '''
+            }
 
-        results = {}
-        for key, command in commands.items():
-            output = run_remote_powershell(command, server_info)
-            try:
-                results[key] = json.loads(output)
-            except:
-                results[key] = output
+            results = {}
+            for key, command in commands.items():
+                remote_cmd = f'''powershell "Invoke-Command -ComputerName {server_info['server']} -Credential (New-Object PSCredential('{server_info['username']}', (ConvertTo-SecureString '{server_info['password']}' -AsPlainText -Force))) -ScriptBlock {{
+                    {command}
+                }}"'''
+                output = subprocess.run(remote_cmd, capture_output=True, text=True, shell=True)
+                try:
+                    results[key] = json.loads(output.stdout)
+                except:
+                    results[key] = output.stdout
 
-        services = get_running_services(server_info)
-        results['services'] = services
-        
-        return jsonify(results)
-    else:
-        # Local system information collection
-        cpu = psutil.cpu_percent(interval=1)
-        memory = psutil.virtual_memory().percent
-        disk = psutil.disk_usage("/").percent
-        system_details = get_local_system_details()
+            services = get_running_services(server_info)
+            results['services'] = services
+            
+            return jsonify(results)
+        else:
+            # Local system information collection
+            cpu = psutil.cpu_percent(interval=1)
+            memory = psutil.virtual_memory().percent
+            disk = psutil.disk_usage("/").percent
+            system_details = get_local_system_details()
 
-        processes = []
-        for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
-            try:
-                proc = p.info
-                processes.append(proc)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        processes.sort(key=lambda x: x['cpu_percent'], reverse=True)
+            processes = []
+            for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+                try:
+                    proc = p.info
+                    processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            processes.sort(key=lambda x: x['cpu_percent'], reverse=True)
 
-        boot_time = datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")
-        uptime = str(datetime.now() - datetime.fromtimestamp(psutil.boot_time())).split('.')[0]
+            boot_time = datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")
+            uptime = str(datetime.now() - datetime.fromtimestamp(psutil.boot_time())).split('.')[0]
 
-        services = get_running_services()
+            services = get_running_services()
 
-        return jsonify({
-            "system_details": system_details,
-            "cpu": cpu,
-            "memory": memory,
-            "disk": disk,
-            "processes": processes,
-            "boot_time": boot_time,
-            "uptime": uptime,
-            "services": services
-        })
+            return jsonify({
+                "system_details": system_details,
+                "cpu": cpu,
+                "memory": memory,
+                "disk": disk,
+                "processes": processes,
+                "boot_time": boot_time,
+                "uptime": uptime,
+                "services": services
+            })
+    except Exception as e:
+        return jsonify({"error": str(e), "isConnected": False}), 500
 
 @app.route("/api/updates")
 @require_server_connection
