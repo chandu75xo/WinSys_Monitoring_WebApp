@@ -6,17 +6,10 @@ import os
 from datetime import datetime
 from functools import wraps
 import json
+import time
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'  # Required for session management
-
-def verify_credentials(server, username, password):
-    try:
-        test_cmd = f'powershell "Test-WSMan -ComputerName {server} -Credential (New-Object PSCredential(\'{username}\', (ConvertTo-SecureString \'{password}\' -AsPlainText -Force)))"'
-        result = subprocess.run(test_cmd, capture_output=True, text=True, shell=True)
-        return result.returncode == 0
-    except Exception:
-        return False
 
 def require_server_connection(f):
     @wraps(f)
@@ -71,22 +64,35 @@ def get_local_system_details():
 
 @app.route("/api/connect", methods=['POST'])
 def connect_to_server():
-    data = request.json
-    server = data.get('server')
-    username = data.get('username')
-    password = data.get('password')
-
-    if not all([server, username, password]):
-        return jsonify({"error": "Missing credentials"}), 400
-
-    if verify_credentials(server, username, password):
-        session['server_info'] = {
-            'server': server,
-            'username': username,
-            'password': password
-        }
-        return jsonify({"message": "Connected successfully"})
-    return jsonify({"error": "Connection failed"}), 401
+    try:
+        # Get the absolute path to the PowerShell script
+        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'connect_server.ps1')
+        
+        # Use a simpler command to open PowerShell
+        command = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& {{Start-Process powershell -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -File \\\"{script_path}\\\"\' -Verb RunAs}}"'
+        
+        # Run the command
+        subprocess.run(command, shell=True)
+        
+        # Wait a bit for the script to run
+        time.sleep(2)
+        
+        # Read connection info from JSON file
+        json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'connection_info.json')
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as f:
+                connection_info = json.load(f)
+                if connection_info.get('isConnected'):
+                    session['server_info'] = {
+                        'server': connection_info['server'],
+                        'username': connection_info['username'],
+                        'password': connection_info['password']
+                    }
+                    return jsonify(connection_info)
+        
+        return jsonify({"error": "Connection failed", "isConnected": False}), 401
+    except Exception as e:
+        return jsonify({"error": str(e), "isConnected": False}), 500
 
 def get_windows_updates(server_info=None):
     try:

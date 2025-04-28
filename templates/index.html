@@ -84,27 +84,6 @@
 
 <body class="p-4">
   <div class="container">
-    <!-- Server Connection Form -->
-    <div class="server-connection">
-      <form id="serverConnectionForm" class="row g-3 align-items-center">
-        <div class="col-md-4">
-          <input type="text" class="form-control" id="serverFQDN" placeholder="Server FQDN" required>
-        </div>
-        <div class="col-md-3">
-          <input type="text" class="form-control" id="username" placeholder="Username" required>
-        </div>
-        <div class="col-md-3">
-          <input type="password" class="form-control" id="password" placeholder="Password" required>
-        </div>
-        <div class="col-md-2">
-          <button type="submit" class="btn btn-primary w-100">Connect</button>
-        </div>
-        <div class="col-12">
-          <span id="connectionStatus" class="connection-status disconnected">Showing Local System Data</span>
-        </div>
-      </form>
-    </div>
-
     <h2 class="mb-4 text-center">🧠 System Monitoring Dashboard</h2>
     <div id="dataSourceIndicator" class="data-source-indicator">
       Currently monitoring: <strong>Local System</strong>
@@ -164,6 +143,12 @@
                 </tbody>
               </table>
             </div>
+          </div>
+          <div class="d-flex justify-content-between align-items-end mt-3">
+            <div class="connection-status disconnected" id="connectionStatus">Showing Local System Data</div>
+            <button id="connectButton" class="btn btn-primary" onclick="connectToServer()">
+              Connect to Server
+            </button>
           </div>
         </div>
       </div>
@@ -284,51 +269,39 @@
     let isConnected = false;
     let currentServer = 'local';
 
-    document.getElementById('serverConnectionForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      const serverFQDN = document.getElementById('serverFQDN').value;
-      const username = document.getElementById('username').value;
-      const password = document.getElementById('password').value;
-
-      try {
-        const response = await fetch('/api/connect', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            server: serverFQDN,
-            username: username,
-            password: password
-          })
-        });
-
-        const data = await response.json();
-
+    function connectToServer() {
+      // Launch PowerShell script
+      fetch('/api/connect', {
+        method: 'POST'
+      }).then(response => {
         if (response.ok) {
+          return response.json();
+        }
+        throw new Error('Connection failed');
+      }).then(data => {
+        if (data.isConnected) {
           isConnected = true;
-          currentServer = serverFQDN;
-          document.getElementById('connectionStatus').textContent = 'Connected to ' + serverFQDN;
+          currentServer = data.server;
+          document.getElementById('connectionStatus').textContent = 'Connected to ' + data.server;
           document.getElementById('connectionStatus').classList.remove('disconnected');
           document.getElementById('connectionStatus').classList.add('connected');
           document.getElementById('dataSourceIndicator').innerHTML =
-            `Currently monitoring: <strong>${serverFQDN}</strong>`;
+            `Currently monitoring: <strong>${data.server}</strong>`;
           refreshAll();
         } else {
-          throw new Error(data.error);
+          throw new Error('Connection failed');
         }
-      } catch (error) {
+      }).catch(error => {
         isConnected = false;
         currentServer = 'local';
-        document.getElementById('connectionStatus').textContent = 'Connection Failed: ' + error.message;
+        document.getElementById('connectionStatus').textContent = 'Connection Failed';
         document.getElementById('connectionStatus').classList.remove('connected');
         document.getElementById('connectionStatus').classList.add('disconnected');
         document.getElementById('dataSourceIndicator').innerHTML =
           'Currently monitoring: <strong>Local System</strong>';
         refreshAll();
-      }
-    });
+      });
+    }
 
     async function fetchStats() {
       try {
