@@ -79,6 +79,206 @@
       text-align: center;
       font-size: 0.9rem;
     }
+
+    .highlight {
+      transition: background-color 0.2s;
+      background-color: #e3f2fd;
+    }
+
+    .stat {
+      transition: all 0.2s ease-in-out;
+    }
+
+    .btn-outline-primary {
+      transition: all 0.3s ease;
+    }
+    
+    .btn-outline-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .scroll-table {
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 0.5rem;
+    }
+    
+    .table-hover tbody tr:hover {
+      background-color: rgba(0,123,255,0.05);
+    }
+
+    .modal-lg {
+      max-width: 80%;
+    }
+    
+    .sticky-top {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    
+    .status-badge {
+      padding: 0.25em 0.6em;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    
+    .status-running {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    
+    .status-stopped {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    
+    .status-paused {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+    
+    .table-responsive {
+      scrollbar-width: thin;
+    }
+    
+    .table-responsive::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    
+    .table-responsive::-webkit-scrollbar-thumb {
+      background-color: rgba(0,0,0,0.2);
+      border-radius: 3px;
+    }
+
+    .table-fixed {
+      table-layout: fixed;
+      width: 100%;
+    }
+
+    .table-fixed th,
+    .table-fixed td {
+      padding: 0.5rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Fixed column widths for processes table */
+    .table-fixed.process-table th:nth-child(1),
+    .table-fixed.process-table td:nth-child(1) {
+      width: 15%;  /* PID */
+    }
+    .table-fixed.process-table th:nth-child(2),
+    .table-fixed.process-table td:nth-child(2) {
+      width: 55%;  /* Name */
+    }
+    .table-fixed.process-table th:nth-child(3),
+    .table-fixed.process-table td:nth-child(3) {
+      width: 15%;  /* CPU% */
+    }
+    .table-fixed.process-table th:nth-child(4),
+    .table-fixed.process-table td:nth-child(4) {
+      width: 15%;  /* Mem% */
+    }
+
+    /* Fixed column widths for services table */
+    .table-fixed.service-table th:nth-child(1),
+    .table-fixed.service-table td:nth-child(1) {
+      width: 25%;  /* Name */
+    }
+    .table-fixed.service-table th:nth-child(2),
+    .table-fixed.service-table td:nth-child(2) {
+      width: 55%;  /* Display */
+    }
+    .table-fixed.service-table th:nth-child(3),
+    .table-fixed.service-table td:nth-child(3) {
+      width: 20%;  /* Status */
+    }
+
+    .drive-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      transition: transform 0.2s;
+      width: 100%;
+    }
+
+    .drive-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .drive-name {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 0.5rem;
+    }
+
+    .drive-type {
+      font-size: 0.8rem;
+      color: #7f8c8d;
+      margin-bottom: 1rem;
+    }
+
+    .drive-stats {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+
+    .drive-stat {
+      text-align: center;
+    }
+
+    .drive-stat-label {
+      font-size: 0.8rem;
+      color: #7f8c8d;
+    }
+
+    .drive-stat-value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #2c3e50;
+    }
+
+    .progress {
+      height: 8px;
+      margin-top: 0.5rem;
+      background-color: #ecf0f1;
+    }
+
+    .progress-bar {
+      transition: width 0.3s ease;
+    }
+
+    .drive-warning {
+      color: #e74c3c;
+    }
+
+    .drive-good {
+      color: #27ae60;
+    }
+
+    .drive-percentages {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .used-percent {
+      color: #e74c3c;
+    }
+
+    .free-percent {
+      color: #27ae60;
+    }
   </style>
 </head>
 
@@ -118,12 +318,25 @@
                     <td><strong>Processor:</strong></td>
                     <td id="processor">Loading...</td>
                   </tr>
+                  <tr>
+                    <td><strong>System Architecture:</strong></td>
+                    <td id="system_architecture">Loading...</td>
+                  </tr>
+                  <tr>
+                    <td><strong>CPU Cores:</strong></td>
+                    <td id="cpu_cores">Loading...</td>
+                  </tr>
+                  
                 </tbody>
               </table>
             </div>
             <div class="col-md-6">
               <table class="table table-sm">
                 <tbody>
+                  <tr>
+                    <td><strong>System Family:</strong></td>
+                    <td id="system_family">Loading...</td>
+                  </tr>
                   <tr>
                     <td><strong>BIOS Version:</strong></td>
                     <td id="bios-version">Loading...</td>
@@ -139,6 +352,14 @@
                   <tr>
                     <td><strong>Manufacturer:</strong></td>
                     <td id="manufacturer">Loading...</td>
+                  </tr>
+                  <tr>
+                    <td><strong>System SKU:</strong></td>
+                    <td id="system_sku">Loading...</td>
+                  </tr>
+                  <tr>
+                    <td><strong>System Serial:</strong></td>
+                    <td id="system_serial">Loading...</td>
                   </tr>
                 </tbody>
               </table>
@@ -178,7 +399,7 @@
         <div class="card p-3">
           <div class="section-title">Running Processes</div>
           <div class="scroll-table">
-            <table class="table table-sm table-hover">
+            <table class="table table-sm table-hover table-fixed process-table">
               <thead>
                 <tr>
                   <th>PID</th>
@@ -190,15 +411,19 @@
               <tbody id="processes"></tbody>
             </table>
           </div>
-          <div class="text-end"><span class="toggle-link" onclick="toggleProcesses()">Show All</span></div>
+          <div class="text-end mt-2">
+            <button class="btn btn-outline-primary btn-sm" id="processToggleBtn">
+              View All
+            </button>
+          </div>
         </div>
       </div>
 
       <div class="col-md-6">
         <div class="card p-3">
-          <div class="section-title">Running Services</div>
+          <div class="section-title">System Services</div>
           <div class="scroll-table">
-            <table class="table table-sm table-hover">
+            <table class="table table-sm table-hover table-fixed service-table">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -209,19 +434,30 @@
               <tbody id="services"></tbody>
             </table>
           </div>
-          <div class="text-end"><span class="toggle-link" onclick="toggleServices()">Show All</span></div>
+          <div class="text-end mt-2">
+            <button class="btn btn-outline-primary btn-sm" id="serviceToggleBtn">
+              View All
+            </button>
+          </div>
         </div>
       </div>
 
-      <div class="col-md-6">
+      <!-- New Layout: Left column for Network Interfaces, right column for Updates, Uptime, Users -->
+      <div class="col-md-6 d-flex flex-column" style="gap: 1.5rem;">
+        <div class="card p-3 flex-fill">
+          <div class="section-title">Network Interfaces</div>
+          <ul id="network" class="list-group list-group-flush"></ul>
+        </div>
+        
+        <!-- Drive Information Section moved here -->
         <div class="card p-3">
-          <div class="section-title">System Uptime & Boot Time</div>
-          <p><strong>Boot Time:</strong> <span id="boot-time"></span></p>
-          <p><strong>Uptime:</strong> <span id="uptime"></span></p>
+          <div class="section-title">Drive Information</div>
+          <div class="row" id="drives-container">
+            <!-- Drive cards will be dynamically inserted here -->
+          </div>
         </div>
       </div>
-
-      <div class="col-md-6">
+      <div class="col-md-6 d-flex flex-column" style="gap: 1.5rem;">
         <div class="card p-3">
           <div class="section-title">Windows Updates</div>
           <div class="scroll-table">
@@ -238,19 +474,82 @@
             </table>
           </div>
         </div>
-      </div>
-
-      <div class="col-md-6">
+        <div class="card p-3">
+          <div class="section-title">System Uptime & Boot Time</div>
+          <p><strong>Boot Time:</strong> <span id="boot-time"></span></p>
+          <p><strong>Uptime:</strong> <span id="uptime"></span></p>
+        </div>
         <div class="card p-3">
           <div class="section-title">Logged-in Users</div>
           <ul id="users" class="list-group list-group-flush"></ul>
         </div>
       </div>
 
+      <!-- Bottom row: Network Traffic and Disk I/O -->
       <div class="col-md-6">
         <div class="card p-3">
-          <div class="section-title">Network Interfaces</div>
-          <ul id="network" class="list-group list-group-flush"></ul>
+          <div class="section-title">Network Traffic</div>
+          <div class="row">
+            <div class="col-6">
+              <div class="mb-3">
+                <small class="text-muted">Download Speed</small>
+                <div id="download-speed" class="stat">0 MB/s</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="mb-3">
+                <small class="text-muted">Upload Speed</small>
+                <div id="upload-speed" class="stat">0 MB/s</div>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-6">
+              <div class="mb-3">
+                <small class="text-muted">Total Downloaded</small>
+                <div id="total-download" class="stat">0 MB</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="mb-3">
+                <small class="text-muted">Total Uploaded</small>
+                <div id="total-upload" class="stat">0 MB</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card p-3">
+          <div class="section-title">Disk I/O</div>
+          <div class="row">
+            <div class="col-6">
+              <div class="mb-3">
+                <small class="text-muted">Read Speed</small>
+                <div id="disk-read" class="stat">0 MB/s</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="mb-3">
+                <small class="text-muted">Write Speed</small>
+                <div id="disk-write" class="stat">0 MB/s</div>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-6">
+              <div class="mb-3">
+                <small class="text-muted">Read Operations</small>
+                <div id="disk-read-ops" class="stat">0 ops/s</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="mb-3">
+                <small class="text-muted">Write Operations</small>
+                <div id="disk-write-ops" class="stat">0 ops/s</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -263,14 +562,20 @@
 
   <script>
     let allProcesses = [];
-    let showingAll = false;
     let allServices = [];
-    let showAllServices = false;
     let isConnected = false;
     let currentServer = 'local';
+    let eventSource = null;
+    let processLimit = 10;
+    let serviceLimit = 10;
+    let lastUpdateTime = 0;
+    const UPDATE_THRESHOLD = 16; // ~60fps
+
+    // Add these variables to track button states
+    let isProcessViewAll = false;
+    let isServiceViewAll = false;
 
     function connectToServer() {
-      // Launch PowerShell script
       fetch('/api/connect', {
         method: 'POST'
       }).then(response => {
@@ -303,6 +608,140 @@
       });
     }
 
+    function startEventSource() {
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      const endpoint = isConnected ? '/api/stream?remote=true' : '/api/stream?remote=false';
+      eventSource = new EventSource(endpoint);
+
+      eventSource.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        
+        if (data.error) {
+          console.error('Error:', data.error);
+          return;
+        }
+
+        // Update stats with animation using requestAnimationFrame for smooth rendering
+        requestAnimationFrame(() => {
+          // Update system stats with millisecond precision
+          updateWithAnimation('cpu', data.cpu.toFixed(2) + '%');
+          updateWithAnimation('memory', data.memory.toFixed(2) + '%');
+          updateWithAnimation('disk', data.disk.toFixed(2) + '%');
+          
+          // Store the data
+          allProcesses = data.processes || [];
+          allServices = data.services || [];
+          
+          // Render based on current view state
+        renderProcesses();
+        renderServices();
+
+          // Update network traffic data with millisecond precision
+        if (data.network) {
+            updateWithAnimation('download-speed', data.network.download_speed.toFixed(3) + ' MB/s');
+            updateWithAnimation('upload-speed', data.network.upload_speed.toFixed(3) + ' MB/s');
+            updateWithAnimation('total-download', data.network.total_download.toFixed(3) + ' MB');
+            updateWithAnimation('total-upload', data.network.total_upload.toFixed(3) + ' MB');
+          }
+
+          // Update disk I/O data with millisecond precision
+        if (data.disk_io) {
+            updateWithAnimation('disk-read', data.disk_io.read_speed.toFixed(3) + ' MB/s');
+            updateWithAnimation('disk-write', data.disk_io.write_speed.toFixed(3) + ' MB/s');
+            updateWithAnimation('disk-read-ops', data.disk_io.read_ops.toFixed(3) + ' ops/s');
+            updateWithAnimation('disk-write-ops', data.disk_io.write_ops.toFixed(3) + ' ops/s');
+          }
+
+          // Add drive information update
+          if (data.drives) {
+            updateDriveInfo(data.drives);
+          }
+        });
+      };
+
+      eventSource.onerror = function(error) {
+        console.error('EventSource failed:', error);
+        eventSource.close();
+        setTimeout(startEventSource, 1000);
+      };
+    }
+
+    // Function to update values with animation
+    function updateWithAnimation(elementId, newValue) {
+      const element = document.getElementById(elementId);
+      if (!element) return;
+      
+      // Add highlight class for visual feedback
+      element.classList.add('highlight');
+      requestAnimationFrame(() => {
+        element.classList.remove('highlight');
+      });
+      
+      // Update the value
+      element.innerText = newValue;
+    }
+
+    // Optimized rendering functions
+    function renderProcesses() {
+      const tbody = document.getElementById('processes');
+      if (!tbody) return;
+      
+      const processesToShow = isProcessViewAll ? allProcesses : allProcesses.slice(0, 10);
+      const fragment = document.createDocumentFragment();
+      
+      processesToShow.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${p.pid}</td>
+          <td title="${p.name}">${p.name}</td>
+          <td>${p.cpu_percent.toFixed(2)}</td>
+          <td>${p.memory_percent.toFixed(2)}</td>
+        `;
+        fragment.appendChild(tr);
+      });
+      
+      tbody.innerHTML = '';
+      tbody.appendChild(fragment);
+    }
+
+    function renderServices() {
+      const tbody = document.getElementById('services');
+      if (!tbody) return;
+      
+      const servicesToShow = isServiceViewAll ? allServices : allServices.slice(0, 10);
+      const fragment = document.createDocumentFragment();
+      
+      servicesToShow.forEach(service => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td title="${service.name}">${service.name}</td>
+          <td title="${service.display_name}">${service.display_name}</td>
+          <td><span class="status-badge status-${service.status.toLowerCase()}">${service.status}</span></td>
+        `;
+        fragment.appendChild(tr);
+      });
+      
+      tbody.innerHTML = '';
+      tbody.appendChild(fragment);
+    }
+
+    // Initial data load
+    async function initialLoad() {
+      await Promise.all([
+        fetchStats(),
+        fetchUpdates(),
+        fetchUsers(),
+        fetchNetwork()
+      ]);
+      startEventSource();
+    }
+
+    // Start with local data
+    initialLoad();
+
     async function fetchStats() {
       try {
         const endpoint = isConnected ? '/api/system?remote=true' : '/api/system?remote=false';
@@ -315,10 +754,15 @@
           document.getElementById('system-model').innerText = data.system_details.system_model || 'N/A';
           document.getElementById('system-type').innerText = data.system_details.system_type || 'N/A';
           document.getElementById('processor').innerText = data.system_details.processor || 'N/A';
+          document.getElementById('system_architecture').innerText = data.system_details.system_architecture || 'N/A';
+          document.getElementById('cpu_cores').innerText = data.system_details.cpu_cores || 'N/A';
+          document.getElementById('system_family').innerText = data.system_details.system_family || 'N/A';
           document.getElementById('bios-version').innerText = data.system_details.bios_version || 'N/A';
           document.getElementById('bios-date').innerText = data.system_details.bios_date || 'N/A';
           document.getElementById('total-ram').innerText = `${data.system_details.total_ram} GB` || 'N/A';
           document.getElementById('manufacturer').innerText = data.system_details.manufacturer || 'N/A';
+          document.getElementById('system_sku').innerText = data.system_details.system_sku || 'N/A';
+          document.getElementById('system_serial').innerText = data.system_details.system_serial || 'N/A';
         }
 
         document.getElementById('cpu').innerText = data.cpu + '%';
@@ -335,41 +779,6 @@
       } catch (error) {
         console.error('Error fetching stats:', error);
       }
-    }
-
-    function renderProcesses() {
-      const list = showingAll ? allProcesses : allProcesses.slice(0, 10);
-      document.getElementById('processes').innerHTML = list.map(p =>
-        `<tr>
-          <td>${p.pid}</td>
-          <td>${p.name}</td>
-          <td>${p.cpu_percent}</td>
-          <td>${p.memory_percent.toFixed(1)}</td>
-        </tr>`
-      ).join('');
-      document.querySelector(".toggle-link").innerText = showingAll ? "Show less" : "Show All";
-    }
-
-    function toggleProcesses() {
-      showingAll = !showingAll;
-      renderProcesses();
-    }
-
-    function renderServices() {
-      const servicesToShow = showAllServices ? allServices : allServices.slice(0, 10);
-      document.getElementById('services').innerHTML = servicesToShow.map(service =>
-        `<tr>
-          <td>${service.name}</td>
-          <td>${service.display_name}</td>
-          <td>${service.status}</td>
-        </tr>`
-      ).join('');
-      document.querySelector("#services + .text-end .toggle-link").innerText = showAllServices ? "Show Less" : "Show All";
-    }
-
-    function toggleServices() {
-      showAllServices = !showAllServices;
-      renderServices();
     }
 
     async function fetchUpdates() {
@@ -451,9 +860,70 @@
       ]);
     }
 
-    // Start with local data
-    refreshAll();
-    setInterval(refreshAll, 10000);
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize button click handlers
+      document.getElementById('processToggleBtn').addEventListener('click', function() {
+        const btn = this;
+        isProcessViewAll = !isProcessViewAll;
+        btn.textContent = isProcessViewAll ? 'Show Less' : 'View All';
+        renderProcesses();
+      });
+
+      document.getElementById('serviceToggleBtn').addEventListener('click', function() {
+        const btn = this;
+        isServiceViewAll = !isServiceViewAll;
+        btn.textContent = isServiceViewAll ? 'Show Less' : 'View All';
+        renderServices();
+      });
+    });
+
+    function updateDriveInfo(drives) {
+      const container = document.getElementById('drives-container');
+      if (!container) return;
+
+      container.innerHTML = drives.map(drive => {
+        const usedPercent = drive.used_percent;
+        const freePercent = drive.free_percent;
+        const progressColor = usedPercent > 90 ? 'bg-danger' : 
+                            usedPercent > 70 ? 'bg-warning' : 'bg-success';
+        
+        return `
+          <div class="col-12">
+            <div class="drive-card">
+              <div class="drive-name">${drive.drive}</div>
+              <div class="drive-type">${drive.fstype}</div>
+              <div class="drive-stats">
+                <div class="drive-stat">
+                  <div class="drive-stat-label">Total</div>
+                  <div class="drive-stat-value">${drive.total_gb} GB</div>
+                </div>
+                <div class="drive-stat">
+                  <div class="drive-stat-label">Used</div>
+                  <div class="drive-stat-value ${usedPercent > 90 ? 'drive-warning' : 'drive-good'}">${drive.used_gb} GB</div>
+                </div>
+                <div class="drive-stat">
+                  <div class="drive-stat-label">Free</div>
+                  <div class="drive-stat-value">${drive.free_gb} GB</div>
+                </div>
+              </div>
+              <div class="progress">
+                <div class="progress-bar ${progressColor}" 
+                     role="progressbar" 
+                     style="width: ${usedPercent}%" 
+                     aria-valuenow="${usedPercent}" 
+                     aria-valuemin="0" 
+                     aria-valuemax="100">
+                </div>
+              </div>
+              <div class="drive-percentages">
+                <span class="used-percent">Used: ${usedPercent}%</span>
+                <span class="free-percent">Free: ${freePercent}%</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
   </script>
 </body>
 

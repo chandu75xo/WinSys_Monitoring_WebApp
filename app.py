@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, session
+from flask import Flask, render_template, jsonify, request, session, Response
 import psutil
 import platform
 import subprocess
@@ -47,7 +47,12 @@ def get_local_system_details():
                 "BIOS Version": "wmic bios get smbiosbiosversion",
                 "BIOS Date": "wmic bios get releasedate",
                 "Total RAM": "wmic computersystem get totalphysicalmemory",
-                "Manufacturer": "wmic computersystem get manufacturer"
+                "Manufacturer": "wmic computersystem get manufacturer",
+                "System Architecture": "wmic os get osarchitecture",
+                "CPU Cores": "wmic cpu get numberofcores",
+                "System Family": "wmic computersystem get systemfamily",
+                "System SKU": "wmic computersystem get systemsku",
+                "System Serial": "wmic bios get serialnumber"
             }
             
             for key, command in commands.items():
@@ -117,16 +122,36 @@ def get_windows_updates(server_info=None):
 
         formatted_updates = []
         for update in updates:
+            installed_on = update.get('InstalledOn', 'N/A')
+            # If InstalledOn is a dict/object, convert to string
+            if isinstance(installed_on, dict):
+                installed_on = installed_on.get('DateTime', str(installed_on))
+            elif not isinstance(installed_on, str):
+                installed_on = str(installed_on)
             formatted_update = {
                 'HotFixID': update.get('HotFixID', 'N/A'),
                 'Description': update.get('Description', 'N/A'),
-                'InstalledOn': update.get('InstalledOn', 'N/A'),
+                'InstalledOn': installed_on,
                 'InstalledBy': update.get('InstalledBy', 'N/A'),
                 'Caption': update.get('Caption', 'N/A'),
                 'CSName': update.get('CSName', 'N/A'),
                 'FixComments': update.get('FixComments', 'N/A')
             }
             formatted_updates.append(formatted_update)
+
+        # Sort updates by InstalledOn (latest first)
+        def parse_date(val):
+            try:
+                # Try to parse as date string (common formats)
+                for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%d-%b-%y"):
+                    try:
+                        return datetime.strptime(val, fmt)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            return datetime.min
+        formatted_updates.sort(key=lambda u: parse_date(u['InstalledOn']), reverse=True)
         return formatted_updates
     except Exception as e:
         return [{"Error": f"Error fetching updates: {str(e)}"}]
@@ -176,12 +201,12 @@ def get_running_services(server_info=None):
             for s in psutil.win_service_iter():
                 try:
                     info = s.as_dict()
-                    if info['status'] == 'running':
-                        services.append({
-                            "name": info["name"],
-                            "display_name": info["display_name"],
-                            "status": info["status"]
-                        })
+                    services.append({
+                        "name": info["name"],
+                        "display_name": info["display_name"],
+                        "status": info["status"],
+                        "start_type": info.get("start_type", "N/A")
+                    })
                 except Exception:
                     continue
             return services
@@ -252,7 +277,7 @@ def system_info():
             system_details = get_local_system_details()
 
             processes = []
-            for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+            for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status']):
                 try:
                     proc = p.info
                     processes.append(proc)
@@ -260,10 +285,22 @@ def system_info():
                     continue
             processes.sort(key=lambda x: x['cpu_percent'], reverse=True)
 
+            # Return ALL services, not just running
+            services = []
+            for s in psutil.win_service_iter():
+                try:
+                    info = s.as_dict()
+                    services.append({
+                        "name": info["name"],
+                        "display_name": info["display_name"],
+                        "status": info["status"],
+                        "start_type": info.get("start_type", "N/A")
+                    })
+                except Exception:
+                    continue
+
             boot_time = datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")
             uptime = str(datetime.now() - datetime.fromtimestamp(psutil.boot_time())).split('.')[0]
-
-            services = get_running_services()
 
             return jsonify({
                 "system_details": system_details,
@@ -271,9 +308,9 @@ def system_info():
                 "memory": memory,
                 "disk": disk,
                 "processes": processes,
+                "services": services,
                 "boot_time": boot_time,
-                "uptime": uptime,
-                "services": services
+                "uptime": uptime
             })
     except Exception as e:
         return jsonify({"error": str(e), "isConnected": False}), 500
@@ -299,6 +336,129 @@ def network_api():
     is_remote = request.args.get('remote') == 'true'
     server_info = session.get('server_info') if is_remote else None
     return jsonify({"network": get_network_info(server_info)})
+
+def get_drive_info():
+    drives = []
+    for partition in psutil.disk_partitions():
+        try:
+            usage = psutil.disk_usage(partition.mountpoint)
+            drive_info = {
+                "drive": partition.device,
+                "mountpoint": partition.mountpoint,
+                "fstype": partition.fstype,
+                "total_gb": round(usage.total / (1024**3), 2),
+                "used_gb": round(usage.used / (1024**3), 2),
+                "free_gb": round(usage.free / (1024**3), 2),
+                "used_percent": usage.percent,
+                "free_percent": 100 - usage.percent
+            }
+            drives.append(drive_info)
+        except Exception:
+            continue
+    return drives
+
+@app.route("/api/stream")
+def stream():
+    def generate():
+        # Initialize counters
+        last_net_io = psutil.net_io_counters()
+        last_disk_io = psutil.disk_io_counters()
+        last_time = time.time()
+        
+        # Pre-initialize CPU monitoring
+        psutil.cpu_percent(interval=None)
+        
+        while True:
+            try:
+                # Get system stats (non-blocking)
+                cpu = psutil.cpu_percent(interval=None)
+                memory = psutil.virtual_memory().percent
+                disk = psutil.disk_usage("/").percent
+                
+                # Get drive information
+                drives = get_drive_info()
+                
+                # Network stats
+                current_net_io = psutil.net_io_counters()
+                current_time = time.time()
+                time_diff = current_time - last_time
+                
+                if current_net_io and time_diff > 0:
+                    download_speed = (current_net_io.bytes_recv - last_net_io.bytes_recv) / time_diff
+                    upload_speed = (current_net_io.bytes_sent - last_net_io.bytes_sent) / time_diff
+                    total_download = current_net_io.bytes_recv / (1024 * 1024)
+                    total_upload = current_net_io.bytes_sent / (1024 * 1024)
+                else:
+                    download_speed = upload_speed = total_download = total_upload = 0.0
+                
+                # Disk I/O stats
+                current_disk_io = psutil.disk_io_counters()
+                if current_disk_io and time_diff > 0:
+                    disk_read_speed = (current_disk_io.read_bytes - last_disk_io.read_bytes) / time_diff
+                    disk_write_speed = (current_disk_io.write_bytes - last_disk_io.write_bytes) / time_diff
+                    disk_read_ops = (current_disk_io.read_count - last_disk_io.read_count) / time_diff
+                    disk_write_ops = (current_disk_io.write_count - last_disk_io.write_count) / time_diff
+                else:
+                    disk_read_speed = disk_write_speed = disk_read_ops = disk_write_ops = 0.0
+                
+                # Update last values
+                last_net_io = current_net_io
+                last_disk_io = current_disk_io
+                last_time = current_time
+                
+                # Get all processes without limiting
+                processes = []
+                for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+                    try:
+                        proc = p.info
+                        processes.append(proc)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                processes.sort(key=lambda x: x['cpu_percent'], reverse=True)
+                
+                # Get all services without limiting
+                services = []
+                for s in psutil.win_service_iter():
+                    try:
+                        info = s.as_dict()
+                        services.append({
+                            "name": info["name"],
+                            "display_name": info["display_name"],
+                            "status": info["status"]
+                        })
+                    except Exception:
+                        continue
+                
+                # Create minimal data object with millisecond precision
+                data = {
+                    "cpu": round(cpu, 2),
+                    "memory": round(memory, 2),
+                    "disk": round(disk, 2),
+                    "drives": drives,
+                    "processes": processes,
+                    "services": services,
+                    "timestamp": datetime.now().strftime("%H:%M:%S.%f")[:-3],
+                    "network": {
+                        "download_speed": round(download_speed / (1024 * 1024), 3),
+                        "upload_speed": round(upload_speed / (1024 * 1024), 3),
+                        "total_download": round(total_download, 3),
+                        "total_upload": round(total_upload, 3)
+                    },
+                    "disk_io": {
+                        "read_speed": round(disk_read_speed / (1024 * 1024), 3),
+                        "write_speed": round(disk_write_speed / (1024 * 1024), 3),
+                        "read_ops": round(disk_read_ops, 3),
+                        "write_ops": round(disk_write_ops, 3)
+                    }
+                }
+                
+                # Send data immediately without any delay
+                yield f"data: {json.dumps(data)}\n\n"
+                time.sleep(0.01)  # Add this line for 10ms sleep
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    
+    return Response(generate(), mimetype='text/event-stream')
 
 if __name__ == "__main__":
     app.run(debug=True)
