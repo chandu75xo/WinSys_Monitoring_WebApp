@@ -1,11 +1,20 @@
-# Set execution policy to allow script execution
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+param(
+    [string]$server,
+    [string]$username,
+    [string]$password
+)
+
+if (-not $server -or -not $username -or -not $password) {
+    Write-Host "Missing required parameters. Usage: -server <server> -username <username> -password <password>"
+    exit 1
+}
+
+# Convert password to SecureString
+$securePassword = ConvertTo-SecureString $password -AsPlainText -Force
 
 # Get the script's directory
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $jsonPath = Join-Path $scriptPath "connection_info.json"
-
-# Use a temp file for atomic write
 $tempJsonPath = "$jsonPath.tmp"
 
 # Clear the screen and set window title
@@ -15,35 +24,9 @@ $Host.UI.RawUI.WindowTitle = "Server Connection"
 Write-Host "=== Server Connection ==="
 Write-Host ""
 
-# Get server details
-$server = Read-Host "Enter Server IP or FQDN"
-if (-not $server) { 
-    Write-Host "No server specified. Exiting..."
-    Start-Sleep -Seconds 2
-    exit 
-}
-
-$username = Read-Host "Enter Username"
-if (-not $username) { 
-    Write-Host "No username specified. Exiting..."
-    Start-Sleep -Seconds 2
-    exit 
-}
-
-$password = Read-Host "Enter Password" -AsSecureString
-if (-not $password) { 
-    Write-Host "No password specified. Exiting..."
-    Start-Sleep -Seconds 2
-    exit 
-}
-
-# Convert secure string to plain text for the session
-$BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
-$plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-
 try {
     Write-Host "`nAttempting to connect to $server..."
-    $credential = New-Object System.Management.Automation.PSCredential($username, $password)
+    $credential = New-Object System.Management.Automation.PSCredential($username, $securePassword)
     $session = New-PSSession -ComputerName $server -Credential $credential -ErrorAction Stop
     
     # Test if we can get basic system info
@@ -55,7 +38,7 @@ try {
         $connectionInfo = @{
             server = $server
             username = $username
-            password = $plainPassword
+            password = $password
             isConnected = $true
             timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         }

@@ -289,7 +289,7 @@
       <div id="dataSourceIndicator" class="data-source-indicator mb-0" style="margin-bottom:0; background:none; padding:0; border-radius:0; font-size:1rem;">
         Currently monitoring: <strong id="currentServerName">Local System</strong>
       </div>
-      <button id="connectButton" class="btn btn-primary ms-3" onclick="connectToServer()">
+      <button id="connectButton" class="btn btn-primary ms-3" onclick="showConnectModal()">
         Connect to Server
       </button>
     </div>
@@ -560,6 +560,25 @@
     <button class="btn btn-outline-primary" onclick="exportData('csv')">Export CSV</button>
     <button class="btn btn-outline-success" onclick="exportData('json')">Export JSON</button>
   </div>
+
+  <div class="modal" tabindex="-1" id="connectModal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Connect to Server</h5></div>
+        <div class="modal-body">
+          <input id="serverInput" class="form-control mb-2" placeholder="Server (IP or FQDN)">
+          <input id="usernameInput" class="form-control mb-2" placeholder="Username">
+          <input id="passwordInput" class="form-control mb-2" type="password" placeholder="Password">
+          <div id="connectStatus" class="mt-2"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="submitConnect()">Connect</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
     let allProcesses = [];
@@ -920,6 +939,29 @@
           </div>
         `;
       }).join('');
+    }
+
+    function showConnectModal() {
+      var modal = new bootstrap.Modal(document.getElementById('connectModal'));
+      document.getElementById('connectStatus').innerText = '';
+      modal.show();
+    }
+
+    function submitConnect() {
+      const server = document.getElementById('serverInput').value;
+      const username = document.getElementById('usernameInput').value;
+      const password = document.getElementById('passwordInput').value;
+      fetch('/api/connect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({server, username, password})
+      }).then(res => res.json()).then(data => {
+        if (data.started) {
+          document.getElementById('connectStatus').innerText = 'PowerShell script started as admin. Please wait for connection.';
+        } else {
+          document.getElementById('connectStatus').innerText = data.error || 'Connection failed.';
+        }
+      });
     }
   </script>
 </body>
