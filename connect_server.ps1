@@ -5,6 +5,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $jsonPath = Join-Path $scriptPath "connection_info.json"
 
+# Use a temp file for atomic write
+$tempJsonPath = "$jsonPath.tmp"
+
 # Clear the screen and set window title
 Clear-Host
 $Host.UI.RawUI.WindowTitle = "Server Connection"
@@ -48,7 +51,7 @@ try {
     $testResult = Invoke-Command -Session $session -ScriptBlock { Invoke-Expression $using:testCommand }
     
     if ($testResult) {
-        # Store the connection details in a JSON file
+        # Store the connection details in a JSON file (atomic write)
         $connectionInfo = @{
             server = $server
             username = $username
@@ -56,12 +59,12 @@ try {
             isConnected = $true
             timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         }
-        
-        $connectionInfo | ConvertTo-Json | Out-File $jsonPath -Force
-        
+        $connectionInfo | ConvertTo-Json | Out-File $tempJsonPath -Force
+        Move-Item -Force $tempJsonPath $jsonPath
         Write-Host "`nSuccessfully connected to $server"
         Write-Host "Connection details saved to $jsonPath"
         Remove-PSSession $session
+        exit 0
     } else {
         throw "Could not retrieve system information from remote server"
     }
@@ -72,7 +75,9 @@ try {
         error = $_.Exception.Message
         timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
-    $connectionInfo | ConvertTo-Json | Out-File $jsonPath -Force
+    $connectionInfo | ConvertTo-Json | Out-File $tempJsonPath -Force
+    Move-Item -Force $tempJsonPath $jsonPath
+    exit 1
 }
 
 Write-Host "`nPress any key to continue..."

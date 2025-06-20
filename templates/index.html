@@ -283,12 +283,19 @@
 </head>
 
 <body class="p-4">
+  <!-- Navbar for connection and data source -->
+  <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm rounded">
+    <div class="container-fluid d-flex justify-content-between align-items-center">
+      <div id="dataSourceIndicator" class="data-source-indicator mb-0" style="margin-bottom:0; background:none; padding:0; border-radius:0; font-size:1rem;">
+        Currently monitoring: <strong id="currentServerName">Local System</strong>
+      </div>
+      <button id="connectButton" class="btn btn-primary ms-3" onclick="connectToServer()">
+        Connect to Server
+      </button>
+    </div>
+  </nav>
   <div class="container">
     <h2 class="mb-4 text-center">🧠 System Monitoring Dashboard</h2>
-    <div id="dataSourceIndicator" class="data-source-indicator">
-      Currently monitoring: <strong>Local System</strong>
-    </div>
-
     <div class="row g-4">
       <!-- System Information Card -->
       <div class="col-12">
@@ -364,12 +371,6 @@
                 </tbody>
               </table>
             </div>
-          </div>
-          <div class="d-flex justify-content-between align-items-end mt-3">
-            <div class="connection-status disconnected" id="connectionStatus">Showing Local System Data</div>
-            <button id="connectButton" class="btn btn-primary" onclick="connectToServer()">
-              Connect to Server
-            </button>
           </div>
         </div>
       </div>
@@ -587,9 +588,7 @@
         if (data.isConnected) {
           isConnected = true;
           currentServer = data.server;
-          document.getElementById('connectionStatus').textContent = 'Connected to ' + data.server;
-          document.getElementById('connectionStatus').classList.remove('disconnected');
-          document.getElementById('connectionStatus').classList.add('connected');
+          document.getElementById('currentServerName').innerText = data.server;
           document.getElementById('dataSourceIndicator').innerHTML =
             `Currently monitoring: <strong>${data.server}</strong>`;
           refreshAll();
@@ -599,9 +598,7 @@
       }).catch(error => {
         isConnected = false;
         currentServer = 'local';
-        document.getElementById('connectionStatus').textContent = 'Connection Failed';
-        document.getElementById('connectionStatus').classList.remove('connected');
-        document.getElementById('connectionStatus').classList.add('disconnected');
+        document.getElementById('currentServerName').innerText = 'Local System';
         document.getElementById('dataSourceIndicator').innerHTML =
           'Currently monitoring: <strong>Local System</strong>';
         refreshAll();

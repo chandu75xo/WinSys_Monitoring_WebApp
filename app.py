@@ -7,6 +7,7 @@ from datetime import datetime
 from functools import wraps
 import json
 import time
+import logging
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'  # Required for session management
@@ -70,41 +71,65 @@ def get_local_system_details():
 @app.route("/api/connect", methods=['POST'])
 def connect_to_server():
     try:
-        # Get the absolute path to the PowerShell script
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'connect_server.ps1')
         json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'connection_info.json')
-        
+        temp_json_path = json_path + '.tmp'
+
+        # Logging
+        logging.info(f"[CONNECT] Script path: {script_path}")
+        logging.info(f"[CONNECT] JSON path: {json_path}")
+
+        # Check if script exists
+        if not os.path.exists(script_path):
+            logging.error("[CONNECT] PowerShell script not found.")
+            return jsonify({"error": "PowerShell script not found.", "isConnected": False}), 500
+
         # Remove any existing connection info file
         if os.path.exists(json_path):
-            os.remove(json_path)
-        
-        # Use a simpler command to open PowerShell
-        command = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& {{Start-Process powershell -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -File \\\"{script_path}\\\"\' -Verb RunAs}}"'
-        
-        # Run the command
-        subprocess.run(command, shell=True)
-        
+            try:
+                os.remove(json_path)
+            except Exception as e:
+                logging.warning(f"[CONNECT] Could not remove old JSON: {e}")
+        if os.path.exists(temp_json_path):
+            try:
+                os.remove(temp_json_path)
+            except Exception as e:
+                logging.warning(f"[CONNECT] Could not remove old temp JSON: {e}")
+
+        # Launch the script
+        command = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& {{Start-Process powershell -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -File \\\"{script_path}\\\'\' -Verb RunAs}}"'
+        logging.info(f"[CONNECT] Running command: {command}")
+        proc = subprocess.Popen(command, shell=True)
+
         # Wait for the script to complete and file to be written
-        max_attempts = 10
+        max_attempts = 30  # up to 30 seconds
         attempt = 0
         while attempt < max_attempts:
             if os.path.exists(json_path):
-                with open(json_path, 'r') as f:
-                    connection_info = json.load(f)
+                try:
+                    with open(json_path, 'r') as f:
+                        connection_info = json.load(f)
                     if connection_info.get('isConnected'):
+                        # WARNING: For production, do NOT store plain text passwords in session!
                         session['server_info'] = {
                             'server': connection_info['server'],
                             'username': connection_info['username'],
-                            'password': connection_info['password']
+                            'password': connection_info['password']  # TODO: Replace with secure token
                         }
+                        logging.info(f"[CONNECT] Successfully connected to {connection_info['server']}")
                         return jsonify(connection_info)
                     else:
+                        logging.error(f"[CONNECT] Connection failed: {connection_info.get('error', 'Unknown error')}")
                         return jsonify({"error": connection_info.get('error', 'Connection failed'), "isConnected": False}), 401
+                except Exception as e:
+                    logging.error(f"[CONNECT] Error reading JSON: {e}")
+                    return jsonify({"error": f"Error reading connection info: {e}", "isConnected": False}), 500
             time.sleep(1)
             attempt += 1
-        
+        logging.error("[CONNECT] Connection timed out.")
         return jsonify({"error": "Connection timed out", "isConnected": False}), 408
     except Exception as e:
+        logging.error(f"[CONNECT] Exception: {e}")
         return jsonify({"error": str(e), "isConnected": False}), 500
 
 def get_windows_updates(server_info=None):
