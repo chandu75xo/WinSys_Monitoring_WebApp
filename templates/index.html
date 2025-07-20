@@ -289,9 +289,6 @@
       <div id="dataSourceIndicator" class="data-source-indicator mb-0" style="margin-bottom:0; background:none; padding:0; border-radius:0; font-size:1rem;">
         Currently monitoring: <strong id="currentServerName">Local System</strong>
       </div>
-      <button id="connectButton" class="btn btn-primary ms-3" onclick="showConnectModal()">
-        Connect to Server
-      </button>
     </div>
   </nav>
   <div class="container">
@@ -474,6 +471,11 @@
               <tbody id="updates"></tbody>
             </table>
           </div>
+          <div class="text-end mt-2">
+            <button class="btn btn-outline-primary btn-sm" id="updatesToggleBtn">
+              View All
+            </button>
+          </div>
         </div>
         <div class="card p-3">
           <div class="section-title">System Uptime & Boot Time</div>
@@ -561,23 +563,6 @@
     <button class="btn btn-outline-success" onclick="exportData('json')">Export JSON</button>
   </div>
 
-  <div class="modal" tabindex="-1" id="connectModal">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title">Connect to Server</h5></div>
-        <div class="modal-body">
-          <input id="serverInput" class="form-control mb-2" placeholder="Server (IP or FQDN)">
-          <input id="usernameInput" class="form-control mb-2" placeholder="Username">
-          <input id="passwordInput" class="form-control mb-2" type="password" placeholder="Password">
-          <div id="connectStatus" class="mt-2"></div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-primary" onclick="submitConnect()">Connect</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
@@ -594,34 +579,41 @@
     // Add these variables to track button states
     let isProcessViewAll = false;
     let isServiceViewAll = false;
+    let allUpdates = [];
+    let isUpdatesViewAll = false;
 
-    function connectToServer() {
-      fetch('/api/connect', {
-        method: 'POST'
-      }).then(response => {
-        if (response.ok) {
-          return response.json();
-        }
-        throw new Error('Connection failed');
-      }).then(data => {
-        if (data.isConnected) {
-          isConnected = true;
-          currentServer = data.server;
-          document.getElementById('currentServerName').innerText = data.server;
-          document.getElementById('dataSourceIndicator').innerHTML =
-            `Currently monitoring: <strong>${data.server}</strong>`;
-          refreshAll();
+    let uptimeBase = null;
+    let uptimeTimer = null;
+
+    function setUptimeTicker(uptimeString) {
+      // Parse uptimeString (format: HH:MM:SS or D days, HH:MM:SS)
+      function parseUptime(str) {
+        let days = 0, h = 0, m = 0, s = 0;
+        let match = str.match(/(\d+)\s+days?,\s*(\d+):(\d+):(\d+)/);
+        if (match) {
+          days = parseInt(match[1]); h = parseInt(match[2]); m = parseInt(match[3]); s = parseInt(match[4]);
         } else {
-          throw new Error('Connection failed');
+          match = str.match(/(\d+):(\d+):(\d+)/);
+          if (match) { h = parseInt(match[1]); m = parseInt(match[2]); s = parseInt(match[3]); }
         }
-      }).catch(error => {
-        isConnected = false;
-        currentServer = 'local';
-        document.getElementById('currentServerName').innerText = 'Local System';
-        document.getElementById('dataSourceIndicator').innerHTML =
-          'Currently monitoring: <strong>Local System</strong>';
-        refreshAll();
-      });
+        return days * 86400 + h * 3600 + m * 60 + s;
+      }
+      function formatUptime(sec) {
+        let days = Math.floor(sec / 86400);
+        let h = Math.floor((sec % 86400) / 3600);
+        let m = Math.floor((sec % 3600) / 60);
+        let s = sec % 60;
+        let str = days > 0 ? `${days} days, ` : '';
+        str += `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        return str;
+      }
+      if (uptimeTimer) clearInterval(uptimeTimer);
+      uptimeBase = parseUptime(uptimeString);
+      document.getElementById('uptime').innerText = formatUptime(uptimeBase);
+      uptimeTimer = setInterval(() => {
+        uptimeBase++;
+        document.getElementById('uptime').innerText = formatUptime(uptimeBase);
+      }, 1000);
     }
 
     function startEventSource() {
@@ -629,7 +621,7 @@
         eventSource.close();
       }
 
-      const endpoint = isConnected ? '/api/stream?remote=true' : '/api/stream?remote=false';
+      const endpoint = '/api/stream?remote=false'; // Always use local stream
       eventSource = new EventSource(endpoint);
 
       eventSource.onmessage = function(event) {
@@ -674,6 +666,12 @@
           // Add drive information update
           if (data.drives) {
             updateDriveInfo(data.drives);
+          }
+
+          // Add updates data update
+          if (data.updates) {
+            allUpdates = data.updates;
+            renderUpdates();
           }
         });
       };
@@ -744,6 +742,25 @@
       tbody.appendChild(fragment);
     }
 
+    function renderUpdates() {
+      // Sort updates by InstalledOn descending (latest first)
+      const sortedUpdates = [...allUpdates].sort((a, b) => {
+        // Try to parse as date, fallback to string compare
+        const dateA = Date.parse(a.InstalledOn) || 0;
+        const dateB = Date.parse(b.InstalledOn) || 0;
+        return dateB - dateA;
+      });
+      const updatesToShow = isUpdatesViewAll ? sortedUpdates : sortedUpdates.slice(0, 6);
+      document.getElementById('updates').innerHTML = updatesToShow.map(update => `
+        <tr>
+          <td>${update.HotFixID}</td>
+          <td>${update.Description}</td>
+          <td>${update.InstalledOn}</td>
+          <td>${update.InstalledBy}</td>
+        </tr>
+      `).join('');
+    }
+
     // Initial data load
     async function initialLoad() {
       await Promise.all([
@@ -760,7 +777,7 @@
 
     async function fetchStats() {
       try {
-        const endpoint = isConnected ? '/api/system?remote=true' : '/api/system?remote=false';
+        const endpoint = '/api/system?remote=false'; // Always use local system stats
         const res = await fetch(endpoint);
         const data = await res.json();
 
@@ -786,6 +803,7 @@
         document.getElementById('disk').innerText = data.disk + '%';
         document.getElementById('boot-time').innerText = data.boot_time;
         document.getElementById('uptime').innerText = data.uptime;
+        setUptimeTicker(data.uptime);
 
         allProcesses = data.processes;
         renderProcesses();
@@ -798,21 +816,15 @@
     }
 
     async function fetchUpdates() {
-      const endpoint = isConnected ? '/api/updates?remote=true' : '/api/updates?remote=false';
+      const endpoint = '/api/updates?remote=' + (isConnected ? 'true' : 'false');
       const res = await fetch(endpoint);
       const data = await res.json();
-      document.getElementById('updates').innerHTML = data.updates.map(update => `
-        <tr>
-          <td>${update.HotFixID}</td>
-          <td>${update.Description}</td>
-          <td>${update.InstalledOn}</td>
-          <td>${update.InstalledBy}</td>
-        </tr>
-      `).join('');
+      allUpdates = data.updates;
+      renderUpdates();
     }
 
     async function fetchUsers() {
-      const endpoint = isConnected ? '/api/users?remote=true' : '/api/users?remote=false';
+      const endpoint = '/api/users?remote=false'; // Always use local users
       const res = await fetch(endpoint);
       const data = await res.json();
       document.getElementById('users').innerHTML = data.users.map(u =>
@@ -821,7 +833,7 @@
     }
 
     async function fetchNetwork() {
-      const endpoint = isConnected ? '/api/network?remote=true' : '/api/network?remote=false';
+      const endpoint = '/api/network?remote=false'; // Always use local network
       const res = await fetch(endpoint);
       const data = await res.json();
       let html = '';
@@ -832,9 +844,9 @@
     }
 
     function exportData(type) {
-      const endpoint = isConnected ? '/api/system?remote=true' : '/api/system?remote=false';
+      const endpoint = '/api/system?remote=false'; // Always use local system data for export
       fetch(endpoint).then(res => res.json()).then(data => {
-        let filename = `system_data_${currentServer}`;
+        let filename = `system_data_local`;
         if (type === 'json') {
           const blob = new Blob([JSON.stringify(data, null, 2)], {
             type: 'application/json'
@@ -891,6 +903,12 @@
         btn.textContent = isServiceViewAll ? 'Show Less' : 'View All';
         renderServices();
       });
+
+      document.getElementById('updatesToggleBtn').addEventListener('click', function() {
+        isUpdatesViewAll = !isUpdatesViewAll;
+        this.textContent = isUpdatesViewAll ? 'Show Less' : 'View All';
+        renderUpdates();
+      });
     });
 
     function updateDriveInfo(drives) {
@@ -939,29 +957,6 @@
           </div>
         `;
       }).join('');
-    }
-
-    function showConnectModal() {
-      var modal = new bootstrap.Modal(document.getElementById('connectModal'));
-      document.getElementById('connectStatus').innerText = '';
-      modal.show();
-    }
-
-    function submitConnect() {
-      const server = document.getElementById('serverInput').value;
-      const username = document.getElementById('usernameInput').value;
-      const password = document.getElementById('passwordInput').value;
-      fetch('/api/connect', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({server, username, password})
-      }).then(res => res.json()).then(data => {
-        if (data.started) {
-          document.getElementById('connectStatus').innerText = 'PowerShell script started as admin. Please wait for connection.';
-        } else {
-          document.getElementById('connectStatus').innerText = data.error || 'Connection failed.';
-        }
-      });
     }
   </script>
 </body>

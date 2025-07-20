@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, session, Response
+from flask import Flask, render_template, jsonify, request, session, Response, redirect, url_for
 import psutil
 import platform
 import subprocess
@@ -68,69 +68,35 @@ def get_local_system_details():
     except Exception as e:
         return {"error": str(e)}
 
+@app.route("/")
+def landing():
+    return render_template("connect.html")
+
+@app.route("/dashboard")
+def dashboard():
+    return render_template("index.html")
+
 @app.route("/api/connect", methods=['POST'])
 def connect_to_server():
     try:
-        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'connect_server.ps1')
-        json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'connection_info.json')
-        temp_json_path = json_path + '.tmp'
-
-        # Logging
-        logging.info(f"[CONNECT] Script path: {script_path}")
-        logging.info(f"[CONNECT] JSON path: {json_path}")
-
-        # Check if script exists
-        if not os.path.exists(script_path):
-            logging.error("[CONNECT] PowerShell script not found.")
-            return jsonify({"error": "PowerShell script not found.", "isConnected": False}), 500
-
-        # Remove any existing connection info file
-        if os.path.exists(json_path):
-            try:
-                os.remove(json_path)
-            except Exception as e:
-                logging.warning(f"[CONNECT] Could not remove old JSON: {e}")
-        if os.path.exists(temp_json_path):
-            try:
-                os.remove(temp_json_path)
-            except Exception as e:
-                logging.warning(f"[CONNECT] Could not remove old temp JSON: {e}")
-
-        # Launch the script
-        command = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& {{Start-Process powershell -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -File \\\"{script_path}\\\'\' -Verb RunAs}}"'
-        logging.info(f"[CONNECT] Running command: {command}")
-        proc = subprocess.Popen(command, shell=True)
-
-        # Wait for the script to complete and file to be written
-        max_attempts = 30  # up to 30 seconds
-        attempt = 0
-        while attempt < max_attempts:
-            if os.path.exists(json_path):
-                try:
-                    with open(json_path, 'r') as f:
-                        connection_info = json.load(f)
-                    if connection_info.get('isConnected'):
-                        # WARNING: For production, do NOT store plain text passwords in session!
-                        session['server_info'] = {
-                            'server': connection_info['server'],
-                            'username': connection_info['username'],
-                            'password': connection_info['password']  # TODO: Replace with secure token
-                        }
-                        logging.info(f"[CONNECT] Successfully connected to {connection_info['server']}")
-                        return jsonify(connection_info)
-                    else:
-                        logging.error(f"[CONNECT] Connection failed: {connection_info.get('error', 'Unknown error')}")
-                        return jsonify({"error": connection_info.get('error', 'Connection failed'), "isConnected": False}), 401
-                except Exception as e:
-                    logging.error(f"[CONNECT] Error reading JSON: {e}")
-                    return jsonify({"error": f"Error reading connection info: {e}", "isConnected": False}), 500
-            time.sleep(1)
-            attempt += 1
-        logging.error("[CONNECT] Connection timed out.")
-        return jsonify({"error": "Connection timed out", "isConnected": False}), 408
+        data = request.get_json()
+        server = data.get('server')
+        username = data.get('username')
+        password = data.get('password')
+        if not all([server, username, password]):
+            return jsonify({"error": "Missing credentials", "isConnected": False}), 400
+        # Store remote connection info in session
+        session['server_info'] = {'server': server, 'username': username, 'password': password}
+        session['connection_type'] = 'remote'
+        return jsonify({"isConnected": True})
     except Exception as e:
-        logging.error(f"[CONNECT] Exception: {e}")
         return jsonify({"error": str(e), "isConnected": False}), 500
+
+@app.route("/api/local", methods=['POST'])
+def monitor_local():
+    session.pop('server_info', None)
+    session['connection_type'] = 'local'
+    return jsonify({"success": True})
 
 def get_windows_updates(server_info=None):
     try:
@@ -211,37 +177,11 @@ def get_network_info(server_info=None):
     except Exception as e:
         return {"Error": str(e)}
 
-@app.route("/")
-def home():
-    return render_template("index.html")
-
-def get_running_services(server_info=None):
-    try:
-        if server_info:
-            cmd = 'Get-Service | Where-Object {$_.Status -eq "Running"} | Select-Object Name,DisplayName,Status | ConvertTo-Json'
-            result = run_remote_powershell(cmd, server_info)
-            return json.loads(result)
-        else:
-            services = []
-            for s in psutil.win_service_iter():
-                try:
-                    info = s.as_dict()
-                    services.append({
-                        "name": info["name"],
-                        "display_name": info["display_name"],
-                        "status": info["status"],
-                        "start_type": info.get("start_type", "N/A")
-                    })
-                except Exception:
-                    continue
-            return services
-    except Exception as e:
-        return [{"Error": f"Error fetching services: {str(e)}"}]
-
 @app.route("/api/system")
 @require_server_connection
 def system_info():
-    is_remote = request.args.get('remote') == 'true'
+    connection_type = session.get('connection_type', 'local')
+    is_remote = connection_type == 'remote'
     
     try:
         if is_remote and 'server_info' in session:
@@ -298,7 +238,8 @@ def system_info():
             # Local system information collection
             cpu = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory().percent
-            disk = psutil.disk_usage("/").percent
+            root = os.environ.get('SystemDrive', 'C:') + '\\'
+            disk = psutil.disk_usage(root).percent
             system_details = get_local_system_details()
 
             processes = []
@@ -343,10 +284,33 @@ def system_info():
 @app.route("/api/updates")
 @require_server_connection
 def updates_api():
-    is_remote = request.args.get('remote') == 'true'
+    is_remote = session.get('connection_type', 'local') == 'remote'
     server_info = session.get('server_info') if is_remote else None
-    updates = get_windows_updates(server_info)
-    return jsonify({"updates": updates})
+    try:
+        cmd = 'Get-WmiObject -Class Win32_QuickFixEngineering | Select-Object HotFixID, Description, InstalledOn, InstalledBy, Caption, CSName, FixComments | ConvertTo-Json -Depth 4'
+        if server_info:
+            result = run_remote_powershell(cmd, server_info)
+        else:
+            result = subprocess.run(f'powershell "{cmd}"', capture_output=True, text=True, shell=True)
+            result = result.stdout
+        updates = json.loads(result)
+        if not isinstance(updates, list):
+            updates = [updates]
+        # Sort updates by InstalledOn descending (latest first)
+        def parse_date(val):
+            try:
+                for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%d-%b-%y"):
+                    try:
+                        return datetime.strptime(val, fmt)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            return datetime.min
+        updates.sort(key=lambda u: parse_date(u.get('InstalledOn', '')), reverse=True)
+        return jsonify({"updates": updates})
+    except Exception as e:
+        return jsonify({"updates": [], "error": str(e)})
 
 @app.route("/api/users")
 @require_server_connection
@@ -384,7 +348,10 @@ def get_drive_info():
 
 @app.route("/api/stream")
 def stream():
-    def generate():
+    connection_type = session.get('connection_type', 'local')
+    is_remote = connection_type == 'remote'
+    server_info = session.get('server_info') if is_remote else None
+    def generate(is_remote, server_info):
         # Initialize counters
         last_net_io = psutil.net_io_counters()
         last_disk_io = psutil.disk_io_counters()
@@ -483,7 +450,7 @@ def stream():
             except Exception as e:
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
     
-    return Response(generate(), mimetype='text/event-stream')
+    return Response(generate(is_remote, server_info), mimetype='text/event-stream')
 
 if __name__ == "__main__":
     app.run(debug=True)

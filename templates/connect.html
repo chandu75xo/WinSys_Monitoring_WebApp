@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connect to Server</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #e0e7ff 0%, #f8fafc 100%);
+      font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .form-card {
+      max-width: 420px;
+      margin: 2rem auto;
+      padding: 2.5rem 2rem 2rem 2rem;
+      background: #fff;
+      border-radius: 1.25rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.10), 0 1.5px 4px rgba(0,0,0,0.04);
+      position: relative;
+      overflow: hidden;
+    }
+    .form-card::before {
+      content: '';
+      position: absolute;
+      top: -60px; left: -60px;
+      width: 180px; height: 180px;
+      background: linear-gradient(135deg, #6366f1 0%, #60a5fa 100%);
+      opacity: 0.10;
+      border-radius: 50%;
+      z-index: 0;
+    }
+    .section-title {
+      font-size: 1.18rem;
+      font-weight: 600;
+      color: #374151;
+      text-align: center;
+      margin-bottom: 1.7rem;
+      z-index: 1;
+      position: relative;
+      letter-spacing: -0.5px;
+    }
+    .form-label {
+      font-weight: 500;
+      color: #6366f1;
+      margin-bottom: 0.35rem;
+      margin-left: 0.1rem;
+      font-size: 1.05rem;
+    }
+    .form-control {
+      border-radius: 0.75rem;
+      font-size: 1.08rem;
+      padding: 0.7rem 1rem;
+      background: #f3f4f6;
+      border: 1.5px solid #222;
+      margin-bottom: 1.2rem;
+      box-shadow: none;
+      transition: border-color 0.2s;
+    }
+    .form-control:focus {
+      border-color: #6366f1;
+      background: #f1f5ff;
+      box-shadow: 0 0 0 0.1rem rgba(99,102,241,0.08);
+    }
+    .btn-primary {
+      background: linear-gradient(90deg, #6366f1 0%, #60a5fa 100%);
+      border: none;
+      font-weight: 600;
+      font-size: 1.1rem;
+      border-radius: 0.75rem;
+      padding: 0.75rem 0;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.08);
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .btn-primary:hover {
+      background: linear-gradient(90deg, #4f46e5 0%, #2563eb 100%);
+      box-shadow: 0 4px 16px rgba(99,102,241,0.13);
+    }
+    .divider {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      margin: 1.5rem 0 1.2rem 0;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1.5px solid #e5e7eb;
+    }
+    .divider:not(:empty)::before {
+      margin-right: .75em;
+    }
+    .divider:not(:empty)::after {
+      margin-left: .75em;
+    }
+    .btn-outline-primary {
+      border-radius: 0.75rem;
+      font-weight: 600;
+      font-size: 1.1rem;
+      padding: 0.7rem 0;
+      border: 1.5px solid #6366f1;
+      color: #6366f1;
+      background: #f8fafc;
+      transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    .btn-outline-primary:hover {
+      background: #6366f1;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.10);
+    }
+    #connectStatus {
+      min-height: 1.5em;
+      font-size: 1.05rem;
+      margin-top: 1.2rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="form-card card">
+      <div class="section-title">Connect to a Windows Server</div>
+      <form id="connectForm" autocomplete="off">
+        <div class="mb-3">
+          <label for="fqdn" class="form-label">Server FQDN or IP</label>
+          <input type="text" class="form-control" id="fqdn" name="fqdn" required />
+        </div>
+        <div class="mb-3">
+          <label for="username" class="form-label">Username</label>
+          <input type="text" class="form-control" id="username" name="username" required />
+        </div>
+        <div class="mb-3">
+          <label for="password" class="form-label">Password</label>
+          <input type="password" class="form-control" id="password" name="password" required />
+        </div>
+        <div class="d-grid gap-2 mb-2">
+          <button type="submit" class="btn btn-primary">Connect to Server</button>
+        </div>
+      </form>
+      <div class="divider">or</div>
+      <div class="d-grid gap-2">
+        <button class="btn btn-outline-primary" id="monitorLocalBtn">Monitor Localhost</button>
+      </div>
+      <div id="connectStatus" class="mt-3 text-center"></div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.getElementById('connectForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const fqdn = document.getElementById('fqdn').value;
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const statusDiv = document.getElementById('connectStatus');
+      statusDiv.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Connecting...';
+      fetch('/api/connect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({server: fqdn, username, password})
+      }).then(res => res.json()).then(data => {
+        if (data.isConnected || data.started) {
+          statusDiv.innerHTML = '<span class="text-success">Connected! Redirecting...</span>';
+          setTimeout(() => { window.location.href = '/dashboard'; }, 1000);
+        } else {
+          statusDiv.innerHTML = '<span class="text-danger">' + (data.error || 'Connection failed.') + '</span>';
+        }
+      }).catch(() => {
+        statusDiv.innerHTML = '<span class="text-danger">Error occurred.</span>';
+      });
+    });
+    document.getElementById('monitorLocalBtn').addEventListener('click', function() {
+      fetch('/api/local', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            window.location.href = '/dashboard';
+          } else {
+            document.getElementById('connectStatus').innerHTML = '<span class="text-danger">Failed to switch to local monitoring.</span>';
+          }
+        });
+    });
+  </script>
+</body>
+</html> 

@@ -12,56 +12,62 @@ if (-not $server -or -not $username -or -not $password) {
 # Convert password to SecureString
 $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
 
-# Get the script's directory
-$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-$jsonPath = Join-Path $scriptPath "connection_info.json"
-$tempJsonPath = "$jsonPath.tmp"
-
-# Clear the screen and set window title
-Clear-Host
-$Host.UI.RawUI.WindowTitle = "Server Connection"
-
-Write-Host "=== Server Connection ==="
-Write-Host ""
-
 try {
-    Write-Host "`nAttempting to connect to $server..."
     $credential = New-Object System.Management.Automation.PSCredential($username, $securePassword)
     $session = New-PSSession -ComputerName $server -Credential $credential -ErrorAction Stop
-    
-    # Test if we can get basic system info
-    $testCommand = "Get-WmiObject Win32_OperatingSystem | Select-Object Caption"
-    $testResult = Invoke-Command -Session $session -ScriptBlock { Invoke-Expression $using:testCommand }
-    
-    if ($testResult) {
-        # Store the connection details in a JSON file (atomic write)
-        $connectionInfo = @{
-            server = $server
-            username = $username
-            password = $password
-            isConnected = $true
-            timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-        }
-        $connectionInfo | ConvertTo-Json | Out-File $tempJsonPath -Force
-        Move-Item -Force $tempJsonPath $jsonPath
-        Write-Host "`nSuccessfully connected to $server"
-        Write-Host "Connection details saved to $jsonPath"
-        Remove-PSSession $session
-        exit 0
-    } else {
-        throw "Could not retrieve system information from remote server"
-    }
-} catch {
-    Write-Host "`nFailed to connect to $server : $_"
-    $connectionInfo = @{
-        isConnected = $false
-        error = $_.Exception.Message
-        timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    }
-    $connectionInfo | ConvertTo-Json | Out-File $tempJsonPath -Force
-    Move-Item -Force $tempJsonPath $jsonPath
-    exit 1
-}
 
-Write-Host "`nPress any key to continue..."
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") 
+    $data = Invoke-Command -Session $session -ScriptBlock {
+        $cpu = (Get-WmiObject Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
+        $mem = Get-WmiObject Win32_OperatingSystem
+        $memory = [math]::Round((1 - $mem.FreePhysicalMemory/$mem.TotalVisibleMemorySize) * 100, 2)
+        $fixedDisks = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }
+        $totalSize = ($fixedDisks | Measure-Object -Property Size -Sum).Sum
+        $totalFree = ($fixedDisks | Measure-Object -Property FreeSpace -Sum).Sum
+        $diskPercent = if ($totalSize -gt 0) { [math]::Round((1 - ($totalFree / $totalSize)) * 100, 2) } else { 0 }
+        $disks = $fixedDisks | ForEach-Object {
+            $used_percent = if ($_.Size -and $_.FreeSpace) {
+                [math]::Round((1 - ($_.FreeSpace / $_.Size)) * 100, 2)
+            } else {
+                0
+            }
+            [PSCustomObject]@{
+                DeviceID = $_.DeviceID
+                Size = $_.Size
+                FreeSpace = $_.FreeSpace
+                UsedPercent = $used_percent
+            }
+        }
+        $processes = Get-Process | Select-Object Id,ProcessName,CPU,PM
+        $services = Get-Service | Select-Object Name,DisplayName,Status
+        $os = Get-WmiObject Win32_OperatingSystem
+        $cs = Get-WmiObject Win32_ComputerSystem
+        $bios = Get-WmiObject Win32_BIOS
+        $system_details = @{
+            os_name = $os.Caption
+            os_version = $os.Version
+            system_model = $cs.Model
+            system_type = $cs.SystemType
+            processor = $cs.NumberOfProcessors
+            bios_version = $bios.SMBIOSBIOSVersion
+            bios_date = $bios.ReleaseDate
+            manufacturer = $cs.Manufacturer
+            total_ram = [math]::Round($cs.TotalPhysicalMemory/1GB, 2)
+        }
+        $result = @{
+            cpu = $cpu
+            memory = $memory
+            disk = $diskPercent
+            disks = $disks
+            processes = $processes
+            services = $services
+            system_details = $system_details
+        }
+        return $result | ConvertTo-Json -Depth 5
+    }
+    Remove-PSSession $session
+    Write-Output $data
+    exit 0
+} catch {
+    Write-Host "Failed to connect or fetch data: $_"
+    exit 1
+} 
